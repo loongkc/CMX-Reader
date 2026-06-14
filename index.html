@@ -1,0 +1,3308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CMX Reader — 专业 CMX 漫画阅读器</title>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg0: #1c1c1c;
+            --bg1: #202020;
+            --bg2: #2a2a2a;
+            --bg3: #333333;
+            --bg4: #3d3d3d;
+            --border: rgba(255, 255, 255, 0.083);
+            --border2: rgba(255, 255, 255, 0.14);
+            --text1: #ffffff;
+            --text2: rgba(255, 255, 255, 0.78);
+            --text3: rgba(255, 255, 255, 0.45);
+            --accent: #60cdff;
+            --accent-bg: rgba(96, 205, 255, 0.15);
+            --accent-hover: rgba(96, 205, 255, 0.22);
+            --topbar-h: 40px;
+            --font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+            --radius-s: 4px;
+            --radius-m: 6px;
+            --radius-l: 8px;
+            --shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+            --trans: 150ms cubic-bezier(0.3, 0, 0.1, 1);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            background: var(--bg0);
+            color: var(--text1);
+            font-family: var(--font);
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased
+        }
+
+        button {
+            font-family: var(--font);
+            cursor: pointer;
+            border: none;
+            outline: none
+        }
+
+        input,
+        select {
+            font-family: var(--font)
+        }
+
+        #topbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--topbar-h);
+            background: var(--bg1);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            z-index: 100;
+            -webkit-app-region: drag;
+            user-select: none;
+            backdrop-filter: blur(24px);
+            padding: 0 4px;
+        }
+
+        #topbar .app-icon {
+            width: 16px;
+            height: 16px;
+            margin-left: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            -webkit-app-region: no-drag;
+            flex-shrink: 0;
+        }
+
+        #topbar .app-title {
+            font-size: 12px;
+            color: var(--text2);
+            letter-spacing: .01em;
+            margin-left: 6px;
+        }
+
+        #topbar .topbar-spacer {
+            flex: 1;
+        }
+
+        #topbar .topbar-btn {
+            width: 36px;
+            height: var(--topbar-h);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            color: var(--text2);
+            font-size: 14px;
+            transition: background var(--trans);
+            border-radius: 0;
+            -webkit-app-region: no-drag;
+            flex-shrink: 0;
+        }
+
+        #topbar .topbar-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        #topbar .topbar-btn.close:hover {
+            background: #c42b1c;
+            color: #fff;
+        }
+
+        #shell {
+            position: fixed;
+            top: var(--topbar-h);
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex
+        }
+
+        body.immersive #topbar {
+            display: none !important;
+        }
+
+        body.immersive #cmdbar {
+            display: none !important;
+        }
+
+        body.immersive #thumb-panel {
+            display: none !important;
+        }
+
+        body.immersive #shell {
+            top: 0;
+        }
+
+        body.immersive #viewer {
+            padding: 0;
+            background: #000;
+        }
+
+        #main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg0)
+        }
+
+        #cmdbar {
+            height: 48px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 12px;
+            flex-shrink: 0;
+        }
+
+        .cmd-btn {
+            height: 32px;
+            min-width: 32px;
+            padding: 0 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            color: var(--text2);
+            font-size: 13px;
+            border-radius: var(--radius-m);
+            transition: background var(--trans), color var(--trans);
+            white-space: nowrap;
+        }
+
+        .cmd-btn:hover {
+            background: rgba(255, 255, 255, 0.07);
+            color: var(--text1)
+        }
+
+        .cmd-btn.active {
+            background: var(--accent-bg);
+            color: var(--accent)
+        }
+
+        .cmd-btn svg,
+        .cmd-btn i {
+            font-size: 16px
+        }
+
+        .cmd-sep {
+            width: 1px;
+            height: 20px;
+            background: var(--border);
+            margin: 0 4px;
+            flex-shrink: 0
+        }
+
+        .cmd-spacer {
+            flex: 1
+        }
+
+        .cmd-label {
+            font-size: 12px;
+            color: var(--text3);
+            white-space: nowrap
+        }
+
+        #page-info {
+            font-size: 13px;
+            color: var(--text3);
+            min-width: 80px;
+            text-align: center
+        }
+
+        #viewer {
+            flex: 1;
+            overflow: auto;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 16px;
+            background: var(--bg0);
+            position: relative;
+            cursor: default;
+        }
+
+        #viewer.dragging {
+            cursor: grabbing
+        }
+
+        #viewer.grab {
+            cursor: grab
+        }
+
+        #viewer::-webkit-scrollbar {
+            width: 8px;
+            height: 8px
+        }
+
+        #viewer::-webkit-scrollbar-track {
+            background: transparent
+        }
+
+        #viewer::-webkit-scrollbar-thumb {
+            background: var(--bg4);
+            border-radius: 4px
+        }
+
+        #pages-container {
+            display: flex;
+            gap: 2px;
+            align-items: flex-start;
+            justify-content: center;
+            max-width: 100%
+        }
+
+        .page-img {
+            max-height: calc(100vh - var(--topbar-h) - 48px - 32px);
+            max-width: 100%;
+            object-fit: contain;
+            display: block;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .page-pair-container {
+            display: flex;
+            gap: 2px;
+            align-items: flex-start;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .page-pair-container .page-img {
+            max-width: 50%
+        }
+
+        #welcome {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            pointer-events: none;
+        }
+
+        #welcome.hidden {
+            display: none
+        }
+
+        .welcome-icon {
+            font-size: 64px;
+            opacity: .18;
+            line-height: 1
+        }
+
+        .welcome-title {
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--text2);
+            letter-spacing: -.01em
+        }
+
+        .welcome-sub {
+            font-size: 14px;
+            color: var(--text3);
+            max-width: 420px;
+            text-align: center;
+            line-height: 1.6
+        }
+
+        .welcome-btns {
+            display: flex;
+            gap: 10px;
+            pointer-events: all
+        }
+
+        .welcome-btn {
+            height: 36px;
+            padding: 0 20px;
+            border-radius: var(--radius-m);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background var(--trans), opacity var(--trans);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .welcome-btn.primary {
+            background: var(--accent);
+            color: #000
+        }
+
+        .welcome-btn.primary:hover {
+            opacity: .88
+        }
+
+        .welcome-btn.secondary {
+            background: var(--bg3);
+            color: var(--text1);
+            border: 1px solid var(--border2)
+        }
+
+        .welcome-btn.secondary:hover {
+            background: var(--bg4)
+        }
+
+        #loading {
+            position: absolute;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            background: var(--bg0);
+            z-index: 50;
+        }
+
+        #loading.show {
+            display: flex
+        }
+
+        .loader {
+            width: 36px;
+            height: 36px;
+            border: 3px solid var(--bg4);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .7s linear infinite
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        .load-text {
+            font-size: 13px;
+            color: var(--text3)
+        }
+
+        #thumb-panel {
+            width: 0;
+            overflow: hidden;
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
+            transition: width var(--trans);
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #thumb-panel.open {
+            width: 180px
+        }
+
+        #thumb-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px
+        }
+
+        #thumb-list::-webkit-scrollbar {
+            width: 4px
+        }
+
+        #thumb-list::-webkit-scrollbar-thumb {
+            background: var(--bg4);
+            border-radius: 2px
+        }
+
+        .thumb-item {
+            border-radius: var(--radius-s);
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: border-color var(--trans), transform var(--trans);
+            flex-shrink: 0;
+            position: relative;
+            background: var(--bg3);
+            min-height: 80px;
+        }
+
+        .thumb-item:hover {
+            border-color: var(--border2);
+            transform: scale(1.02)
+        }
+
+        .thumb-item.active {
+            border-color: var(--accent)
+        }
+
+        .thumb-item img {
+            width: 100%;
+            display: block;
+            min-height: 80px;
+            object-fit: cover;
+        }
+
+        .thumb-num {
+            position: absolute;
+            bottom: 3px;
+            right: 4px;
+            font-size: 10px;
+            color: #fff;
+            background: rgba(0, 0, 0, .6);
+            padding: 1px 4px;
+            border-radius: 3px;
+            line-height: 1.4;
+            z-index: 1;
+        }
+
+        #settings-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: none
+        }
+
+        #settings-overlay.open {
+            display: block
+        }
+
+        #settings-bg {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .45)
+        }
+
+        #settings-panel {
+            position: absolute;
+            right: 0;
+            top: var(--topbar-h);
+            bottom: 0;
+            width: 320px;
+            background: var(--bg2);
+            border-left: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            box-shadow: var(--shadow);
+            animation: slideIn .2s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(40px);
+                opacity: 0
+            }
+
+            to {
+                transform: none;
+                opacity: 1
+            }
+        }
+
+        .settings-header {
+            padding: 20px 20px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            background: var(--bg2);
+            z-index: 1;
+        }
+
+        .settings-title {
+            font-size: 16px;
+            font-weight: 600
+        }
+
+        .close-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: var(--radius-s);
+            background: transparent;
+            color: var(--text2);
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background var(--trans);
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.09)
+        }
+
+        .settings-section {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .settings-section:last-child {
+            border-bottom: none
+        }
+
+        .section-label {
+            font-size: 11px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 12px;
+            font-weight: 600
+        }
+
+        .setting-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px
+        }
+
+        .setting-row:last-child {
+            margin-bottom: 0
+        }
+
+        .setting-name {
+            font-size: 13px;
+            color: var(--text2)
+        }
+
+        .setting-name small {
+            display: block;
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 1px
+        }
+
+        .toggle-wrap {
+            position: relative;
+            width: 40px;
+            height: 20px
+        }
+
+        .toggle-wrap input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute
+        }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: var(--bg4);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background var(--trans);
+        }
+
+        .toggle-wrap input:checked+.toggle-track {
+            background: var(--accent)
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform var(--trans);
+            pointer-events: none;
+        }
+
+        .toggle-wrap input:checked~.toggle-thumb {
+            transform: translateX(20px)
+        }
+
+        .seg-ctrl {
+            display: flex;
+            background: var(--bg0);
+            border-radius: var(--radius-m);
+            padding: 2px;
+            gap: 2px;
+            border: 1px solid var(--border)
+        }
+
+        .seg-btn {
+            flex: 1;
+            height: 26px;
+            border-radius: var(--radius-s);
+            font-size: 12px;
+            background: transparent;
+            color: var(--text3);
+            transition: background var(--trans), color var(--trans);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .seg-btn.active {
+            background: var(--bg3);
+            color: var(--text1)
+        }
+
+        .range-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px
+        }
+
+        input[type=range] {
+            flex: 1;
+            height: 4px;
+            accent-color: var(--accent)
+        }
+
+        .range-val {
+            font-size: 12px;
+            color: var(--text3);
+            min-width: 36px;
+            text-align: right
+        }
+
+        .btn-primary {
+            height: 32px;
+            padding: 0 16px;
+            background: var(--accent);
+            color: #000;
+            border-radius: var(--radius-m);
+            font-size: 13px;
+            font-weight: 500;
+            transition: opacity var(--trans);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary:hover {
+            opacity: .88
+        }
+
+        .btn-primary:disabled {
+            opacity: .35;
+            cursor: not-allowed
+        }
+
+        .btn-secondary {
+            height: 32px;
+            padding: 0 16px;
+            background: var(--bg3);
+            color: var(--text1);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-m);
+            font-size: 13px;
+            transition: background var(--trans);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg4)
+        }
+
+        #toast-area {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end
+        }
+
+        .toast {
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-m);
+            padding: 10px 16px;
+            font-size: 13px;
+            color: var(--text1);
+            box-shadow: var(--shadow);
+            animation: toastIn .25s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 200px;
+            max-width: 320px;
+        }
+
+        .toast.success {
+            border-color: rgba(76, 194, 113, .4)
+        }
+
+        .toast.error {
+            border-color: rgba(255, 100, 100, .4)
+        }
+
+        @keyframes toastIn {
+            from {
+                transform: translateX(20px);
+                opacity: 0
+            }
+
+            to {
+                transform: none;
+                opacity: 1
+            }
+        }
+
+        @keyframes toastOut {
+            to {
+                transform: translateX(20px);
+                opacity: 0
+            }
+        }
+
+        #zoom-val {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, .75);
+            color: #fff;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity .3s;
+            z-index: 80;
+        }
+
+        #zoom-val.show {
+            opacity: 1
+        }
+
+        .file-input-hidden {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+            width: 0;
+            height: 0
+        }
+
+        #password-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            display: none;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #password-overlay.open {
+            display: flex
+        }
+
+        #password-panel {
+            width: 420px;
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-l);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            animation: popIn .2s ease;
+        }
+
+        @keyframes popIn {
+            from {
+                transform: scale(.94);
+                opacity: 0
+            }
+
+            to {
+                transform: none;
+                opacity: 1
+            }
+        }
+
+        .pwd-header {
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .pwd-header .pwd-title {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px
+        }
+
+        .pwd-body {
+            padding: 20px
+        }
+
+        .pwd-body p {
+            font-size: 13px;
+            color: var(--text3);
+            margin-bottom: 6px
+        }
+
+        .pwd-body .pwd-filename {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 14px;
+            word-break: break-all
+        }
+
+        .pwd-input-row {
+            display: flex;
+            gap: 0
+        }
+
+        .pwd-input-row input {
+            flex: 1;
+            background: var(--bg0);
+            border: 1px solid var(--border2);
+            border-right: none;
+            border-radius: var(--radius-m) 0 0 var(--radius-m);
+            padding: 9px 12px;
+            color: var(--text1);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .pwd-input-row input:focus {
+            border-color: var(--accent)
+        }
+
+        .pwd-toggle-btn {
+            width: 36px;
+            background: var(--bg0);
+            border: 1px solid var(--border2);
+            border-radius: 0 var(--radius-m) var(--radius-m) 0;
+            color: var(--text3);
+            font-size: 14px;
+            cursor: pointer;
+            transition: background var(--trans);
+        }
+
+        .pwd-toggle-btn:hover {
+            background: var(--bg3)
+        }
+
+        .pwd-error {
+            font-size: 12px;
+            color: #e06060;
+            margin-top: 8px;
+            display: none
+        }
+
+        .pwd-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end
+        }
+
+        #info-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            display: none;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #info-overlay.open {
+            display: flex
+        }
+
+        #info-panel {
+            width: 480px;
+            max-height: 80vh;
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-l);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: popIn .2s ease;
+        }
+
+        .info-header {
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        .info-title {
+            font-size: 15px;
+            font-weight: 600
+        }
+
+        .info-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            flex: 1
+        }
+
+        .info-table {
+            width: 100%;
+            font-size: 13px
+        }
+
+        .info-table td {
+            padding: 5px 0;
+            vertical-align: top
+        }
+
+        .info-table td:first-child {
+            color: var(--text3);
+            width: 110px;
+            flex-shrink: 0
+        }
+
+        .info-table td:last-child {
+            color: var(--text2);
+            word-break: break-all
+        }
+
+        .info-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end
+        }
+
+        #about-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            display: none;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+
+        #about-overlay.open {
+            display: flex
+        }
+
+        #about-panel {
+            width: 520px;
+            max-height: 85vh;
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-l);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            animation: popIn .2s ease;
+        }
+
+        .about-header {
+            padding: 16px 20px 12px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between
+        }
+
+        .about-title {
+            font-size: 15px;
+            font-weight: 600
+        }
+
+        .about-body {
+            padding: 16px 20px;
+            overflow-y: auto;
+            flex: 1;
+            font-size: 13px;
+            color: var(--text2);
+            line-height: 1.7;
+        }
+
+        .about-body::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .about-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .about-body::-webkit-scrollbar-thumb {
+            background: var(--bg4);
+            border-radius: 3px;
+        }
+
+        .about-body::-webkit-scrollbar-thumb:hover {
+            background: var(--text3);
+        }
+
+        .about-body h3 {
+            font-size: 14px;
+            color: var(--accent);
+            margin: 14px 0 6px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .about-body h3:first-child {
+            margin-top: 0
+        }
+
+        .kbd-table {
+            width: 100%;
+            font-size: 12px;
+            border-collapse: collapse;
+        }
+
+        .kbd-table td {
+            padding: 4px 6px;
+            vertical-align: top;
+        }
+
+        .kbd-table td:first-child {
+            width: 130px;
+            color: var(--text1);
+            white-space: nowrap;
+        }
+
+        .kbd-table td:last-child {
+            color: var(--text3);
+        }
+
+        .kbd-key {
+            display: inline-block;
+            padding: 1px 6px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--text1);
+            margin: 0 1px;
+        }
+
+        .about-body p {
+            margin: 4px 0;
+        }
+
+        .about-body ul {
+            margin: 4px 0;
+            padding-left: 16px;
+        }
+
+        .about-body ul li {
+            margin: 2px 0;
+        }
+
+        .about-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end
+        }
+
+        /* ══════════════════════════════════════════════════════════════════════════════
+           CMX Converter Dialog
+           ══════════════════════════════════════════════════════════════════════════════ */
+
+        #convert-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, .6);
+            backdrop-filter: blur(4px);
+        }
+
+        #convert-overlay.open {
+            display: flex
+        }
+
+        #convert-panel {
+            width: 520px;
+            max-height: 85vh;
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-l);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #convert-panel .conv-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .conv-title {
+            font-size: 16px;
+            font-weight: 600;
+            flex: 1;
+        }
+
+        .conv-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .conv-body::-webkit-scrollbar {
+            width: 5px;
+        }
+
+        .conv-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .conv-body::-webkit-scrollbar-thumb {
+            background: var(--bg4);
+            border-radius: 3px;
+        }
+
+        .conv-body::-webkit-scrollbar-thumb:hover {
+            background: var(--text3);
+        }
+
+        .conv-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .conv-section-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+
+        .conv-drop-zone {
+            border: 2px dashed var(--border2);
+            border-radius: var(--radius-m);
+            padding: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color var(--trans), background var(--trans);
+            color: var(--text3);
+            font-size: 13px;
+            line-height: 1.8;
+        }
+
+        .conv-drop-zone:hover,
+        .conv-drop-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-bg);
+            color: var(--text1);
+        }
+
+        .conv-drop-zone .dz-icon {
+            font-size: 32px;
+            margin-bottom: 6px;
+        }
+
+        .conv-file-name {
+            font-size: 12px;
+            color: var(--accent);
+            padding: 6px 10px;
+            background: var(--accent-bg);
+            border-radius: var(--radius-s);
+            word-break: break-all;
+            display: none;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .conv-file-name.show {
+            display: flex
+        }
+
+        .conv-file-name .remove-btn {
+            background: none;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0 4px;
+            flex-shrink: 0;
+        }
+
+        .conv-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .conv-row label {
+            font-size: 13px;
+            color: var(--text2);
+            white-space: nowrap;
+            min-width: 48px;
+        }
+
+        .conv-row input[type="text"] {
+            flex: 1;
+            height: 32px;
+            padding: 0 10px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-s);
+            color: var(--text1);
+            font-size: 13px;
+        }
+
+        .conv-row input[type="text"]:focus {
+            border-color: var(--accent);
+            outline: none;
+        }
+
+        .conv-row select {
+            flex: 1;
+            height: 32px;
+            padding: 0 8px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-s);
+            color: var(--text1);
+            font-size: 13px;
+        }
+
+        .conv-checks {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .conv-checks label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text2);
+            cursor: pointer;
+        }
+
+        .conv-checks input[type="checkbox"] {
+            accent-color: var(--accent);
+        }
+
+        .conv-progress {
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .conv-progress.show {
+            display: flex
+        }
+
+        .conv-progress-bar {
+            height: 6px;
+            background: var(--bg3);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .conv-progress-bar .fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width .2s;
+            width: 0%;
+        }
+
+        .conv-progress-text {
+            font-size: 12px;
+            color: var(--text3);
+            text-align: center;
+        }
+
+        .conv-footer {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .conv-btn {
+            height: 34px;
+            padding: 0 18px;
+            border-radius: var(--radius-m);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background var(--trans), opacity var(--trans);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .conv-btn.primary {
+            background: var(--accent);
+            color: #000;
+        }
+
+        .conv-btn.primary:hover {
+            opacity: .88
+        }
+
+        .conv-btn.primary:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+        }
+
+        .conv-btn.secondary {
+            background: var(--bg3);
+            color: var(--text1);
+            border: 1px solid var(--border2);
+        }
+
+        .conv-btn.secondary:hover {
+            background: var(--bg4)
+        }
+
+        .conv-stats {
+            display: none;
+            font-size: 12px;
+            color: var(--text2);
+            padding: 8px 12px;
+            background: var(--bg3);
+            border-radius: var(--radius-s);
+            line-height: 1.8;
+        }
+
+        .conv-stats.show {
+            display: block
+        }
+    </style>
+</head>
+
+<body>
+
+    <input type="file" id="file-input" class="file-input-hidden" accept=".cmx" />
+
+    <div id="topbar">
+        <div class="app-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2" width="14" height="12" rx="1.5" fill="#60cdff" opacity=".9" />
+                <text x="3" y="12" font-size="9" fill="#000" font-weight="bold">C</text>
+            </svg>
+        </div>
+        <span class="app-title">CMX Reader</span>
+        <div class="topbar-spacer"></div>
+        <button class="topbar-btn" id="settings-btn" title="设置">⚙️</button>
+        <button class="topbar-btn" id="thumb-toggle-btn" title="缩略图">🗒</button>
+        <button class="topbar-btn" id="info-btn" title="文件信息">ℹ️</button>
+        <button class="topbar-btn close" title="关闭" onclick="window.close?.()">✕</button>
+    </div>
+
+    <div id="shell">
+        <div id="main">
+            <div id="cmdbar">
+                <button class="cmd-btn" id="open-file-btn" title="打开 CMX 文件">
+                    <span>📂</span><span>打开文件</span>
+                </button>
+                <div class="cmd-sep"></div>
+                <button class="cmd-btn" id="prev-btn" title="上一页 (←)" disabled>
+                    <span>◀</span>
+                </button>
+                <span id="page-info">— / —</span>
+                <button class="cmd-btn" id="next-btn" title="下一页 (→)" disabled>
+                    <span>▶</span>
+                </button>
+                <div class="cmd-sep"></div>
+                <button class="cmd-btn" id="mode-single" title="单页模式">
+                    <span>▬</span><span>单页</span>
+                </button>
+                <button class="cmd-btn active" id="mode-double" title="双页模式">
+                    <span>⬛</span><span>双页</span>
+                </button>
+                <div class="cmd-sep"></div>
+                <button class="cmd-btn" id="dir-ltr" title="从左往右">
+                    <span>⇒</span><span>LTR</span>
+                </button>
+                <button class="cmd-btn active" id="dir-rtl" title="从右往左 (日漫)">
+                    <span>⇐</span><span>RTL</span>
+                </button>
+                <div class="cmd-sep"></div>
+                <button class="cmd-btn" id="zoom-out-btn" title="缩小 (-)">－</button>
+                <button class="cmd-btn" id="zoom-reset-btn" title="重置缩放">100%</button>
+                <button class="cmd-btn" id="zoom-in-btn" title="放大 (+)">＋</button>
+                <div class="cmd-sep"></div>
+                <button class="cmd-btn" id="thumb-toggle-cmd" title="缩略图">🗒</button>
+                <button class="cmd-btn" id="info-cmd" title="文件信息">ℹ️</button>
+                <div class="cmd-spacer"></div>
+                <span class="cmd-label" id="book-title">未打开文件</span>
+            </div>
+
+            <div style="flex:1;display:flex;overflow:hidden">
+                <div id="thumb-panel">
+                    <div id="thumb-list"></div>
+                </div>
+                <div id="viewer">
+                    <div id="welcome">
+                        <div class="welcome-icon">📖</div>
+                        <div class="welcome-title">CMX 漫画阅读器</div>
+                        <div class="welcome-sub">
+                            专为 CMX 格式优化的漫画阅读器<br>
+                            支持 O(1) 随机页面访问 · AES-256-GCM 加密 · 内置缩略图<br>
+                            拖拽 .cmx 文件到此处或点击下方按钮打开
+                        </div>
+                        <div class="welcome-btns">
+                            <button class="welcome-btn primary" id="welcome-open-btn">📂 打开 CMX 文件</button>
+                        </div>
+                    </div>
+                    <div id="loading">
+                        <div class="loader"></div>
+                        <span class="load-text" id="load-text">正在加载...</span>
+                    </div>
+                    <div id="pages-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="zoom-val">100%</div>
+    <div id="toast-area"></div>
+
+    <div id="password-overlay">
+        <div id="password-panel">
+            <div class="pwd-header">
+                <div class="pwd-title">🔒 此 CMX 文件已加密</div>
+            </div>
+            <div class="pwd-body">
+                <p>请输入密码以解密并阅读此漫画文件</p>
+                <div class="pwd-filename" id="pwd-filename"></div>
+                <div class="pwd-input-row">
+                    <input type="password" id="pwd-input" placeholder="输入密码…" autocomplete="off" />
+                    <button class="pwd-toggle-btn" id="pwd-toggle" title="显示/隐藏密码">👁</button>
+                </div>
+                <div class="pwd-error" id="pwd-error"></div>
+            </div>
+            <div class="pwd-footer">
+                <button class="btn-secondary" id="pwd-cancel">取消</button>
+                <button class="btn-primary" id="pwd-confirm">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="info-overlay">
+        <div id="info-panel">
+            <div class="info-header">
+                <div class="info-title">📋 CMX 文件信息</div>
+                <button class="close-btn" id="info-close">✕</button>
+            </div>
+            <div class="info-body">
+                <table class="info-table" id="info-table"></table>
+            </div>
+            <div class="info-footer">
+                <button class="btn-secondary" id="info-verify-btn">🔍 验证完整性</button>
+                <button class="btn-primary" id="info-close-btn">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="settings-overlay">
+        <div id="settings-bg"></div>
+        <div id="settings-panel">
+            <div class="settings-header">
+                <span class="settings-title">⚙️ 设置</span>
+                <button class="close-btn" id="close-settings">✕</button>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">阅读模式</div>
+                <div class="setting-row">
+                    <div class="setting-name">双页模式</div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-double" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">RTL 阅读方向<small>从右到左（日漫模式）</small></div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-rtl" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">首页独立显示<small>双页时第一页单独显示</small></div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-first-alone" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">显示</div>
+                <div class="range-row">
+                    <span class="setting-name" style="min-width:60px">缩放</span>
+                    <input type="range" id="zoom-slider" min="50" max="200" value="100" step="5">
+                    <span class="range-val" id="zoom-disp">100%</span>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">暗黑背景</div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-bg" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">导航</div>
+                <div class="setting-row">
+                    <div class="setting-name">键盘快捷键<small>← → 翻页，+/- 缩放</small></div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-keys" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+                <div class="setting-row">
+                    <div class="setting-name">点击区域翻页<small>点击左/右半区翻页</small></div>
+                    <label class="toggle-wrap">
+                        <input type="checkbox" id="toggle-click" checked>
+                        <div class="toggle-track"></div>
+                        <div class="toggle-thumb"></div>
+                    </label>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">工具</div>
+                <div class="setting-row">
+                    <div class="setting-name">CMX 转换器<small>将 ZIP/CBZ/文件夹 转换为 CMX 格式</small></div>
+                    <button class="conv-btn secondary" id="open-converter-btn"
+                        style="height:30px;padding:0 14px;font-size:12px;">🔄 打开转换器</button>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">CMX 格式</div>
+                <div style="font-size:12px;color:var(--text3);line-height:1.8">
+                    <strong style="color:var(--accent)">CMX v1.0</strong> — 专属漫画格式<br>
+                    • O(1) 随机页面访问<br>
+                    • AES-256-GCM 加密<br>
+                    • 内置缩略图支持<br>
+                    • zlib/zstd/lz4 压缩<br>
+                    • 元数据嵌入<br>
+                    • 完整性校验
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="section-label">关于</div>
+                <div class="setting-row">
+                    <div class="setting-name">关于 CMX 阅读器<small>版本信息、功能介绍、快捷键</small></div>
+                    <button class="conv-btn secondary" id="open-about-btn"
+                        style="height:30px;padding:0 14px;font-size:12px;">ℹ️ 查看详情</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="about-overlay">
+        <div id="about-panel">
+            <div class="about-header">
+                <span class="about-title">ℹ️ 关于 CMX 阅读器</span>
+                <button class="close-btn" id="about-close">✕</button>
+            </div>
+            <div class="about-body">
+                <h3>📖 阅读器介绍</h3>
+                <p><strong>CMX Reader v1.0</strong> 是一款专为 CMX 漫画格式打造的 Web 端阅读器，无需安装任何软件，直接在浏览器中即可流畅阅读 CMX 漫画文件。</p>
+                <ul>
+                    <li>支持单页 / 双页模式，适配不同阅读场景</li>
+                    <li>支持 LTR（从左到右）和 RTL（从右到左）阅读方向</li>
+                    <li>内置缩略图导航，快速定位页面</li>
+                    <li>支持缩放、全屏沉浸式阅读</li>
+                    <li>支持 AES-256-GCM 加密文件的解密阅读</li>
+                    <li>内置 CMX 转换器，可将 ZIP/CBZ/图片文件夹转换为 CMX 格式</li>
+                    <li>完全在浏览器中运行，数据不上传服务器，保护隐私</li>
+                </ul>
+
+                <h3>📦 CMX 格式介绍</h3>
+                <p><strong>CMX（Comic eXchange）</strong> 是一种专为漫画设计的二进制文件格式，具有以下特性：</p>
+                <ul>
+                    <li><strong>O(1) 随机访问</strong> — 通过索引表直接定位任意页面，无需顺序解压</li>
+                    <li><strong>多种压缩</strong> — 支持 zlib / zstd / lz4 压缩算法</li>
+                    <li><strong>内置缩略图</strong> — 缩略图嵌入文件，阅读时可快速预览</li>
+                    <li><strong>AES-256-GCM 加密</strong> — 军事级加密保护漫画内容</li>
+                    <li><strong>元数据支持</strong> — 内嵌标题、作者、日期等信息</li>
+                    <li><strong>完整性校验</strong> — 内置 MD5 校验，防止文件损坏</li>
+                    <li><strong>多图片格式</strong> — 支持 JPEG、PNG、WebP、AVIF</li>
+                </ul>
+                <p>格式版本: CMX v1.0 | 魔数: <code>CMX!</code> / <code>CMX~</code></p>
+
+                <h3>⌨️ 键盘快捷键</h3>
+                <table class="kbd-table">
+                    <tr>
+                        <td><span class="kbd-key">←</span> / <span class="kbd-key">→</span></td>
+                        <td>翻页（RTL 模式下方向反转）</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">↑</span> / <span class="kbd-key">↓</span></td>
+                        <td>上/下翻页</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">PageUp</span> / <span class="kbd-key">PageDown</span></td>
+                        <td>上/下翻页</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Home</span></td>
+                        <td>跳转到首页</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">End</span></td>
+                        <td>跳转到末页</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Space</span></td>
+                        <td>下一页</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">+</span> / <span class="kbd-key">=</span></td>
+                        <td>放大</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">-</span></td>
+                        <td>缩小</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">0</span></td>
+                        <td>重置缩放至 100%</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">F</span></td>
+                        <td>沉浸式阅读（隐藏 UI，仅显示漫画画面）</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">F11</span></td>
+                        <td>浏览器全屏</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Esc</span></td>
+                        <td>关闭弹窗 / 退出全屏</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Ctrl</span> + <span class="kbd-key">I</span></td>
+                        <td>查看文件信息</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Ctrl</span> + <span class="kbd-key">D</span></td>
+                        <td>切换单/双页模式</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Ctrl</span> + <span class="kbd-key">R</span></td>
+                        <td>切换 LTR / RTL 阅读方向</td>
+                    </tr>
+                    <tr>
+                        <td><span class="kbd-key">Ctrl</span> + <span class="kbd-key">O</span></td>
+                        <td>打开 CMX 文件</td>
+                    </tr>
+                </table>
+
+                <h3>🖱️ 鼠标操作</h3>
+                <table class="kbd-table">
+                    <tr>
+                        <td>点击左半区</td>
+                        <td>上一页</td>
+                    </tr>
+                    <tr>
+                        <td>点击右半区</td>
+                        <td>下一页</td>
+                    </tr>
+                    <tr>
+                        <td>滚轮</td>
+                        <td>滚动 / 缩放（配合 Ctrl）</td>
+                    </tr>
+                    <tr>
+                        <td>按住拖拽（放大后生效）</td>
+                        <td>平移画面</td>
+                    </tr>
+                </table>
+
+                <h3>📃 技术信息</h3>
+                <ul>
+                    <li>版本: <strong>v1.0</strong></li>
+                    <li>技术栈: 纯 HTML/CSS/JavaScript，零依赖后端</li>
+                    <li>加密实现: Web Crypto API (AES-256-GCM)</li>
+                    <li>完整性校验: 纯 JS MD5 实现</li>
+                    <li>解压引擎: pako (zlib)</li>
+                    <li>转换器: JSZip</li>
+                    <li>兼容浏览器: Chrome 80+, Edge 80+, Firefox 80+</li>
+                </ul>
+            </div>
+            <div class="about-footer">
+                <button class="btn-primary" id="about-ok-btn">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="convert-overlay">
+        <div id="convert-panel">
+            <div class="conv-header">
+                <span class="conv-title">🔄 CMX 转换器</span>
+                <button class="close-btn" id="convert-close">✕</button>
+            </div>
+            <div class="conv-body">
+                <div class="conv-section">
+                    <div class="conv-section-label">选择源文件</div>
+                    <div class="conv-drop-zone" id="conv-drop-zone">
+                        <div class="dz-icon">📦</div>
+                        <div>拖拽 ZIP / CBZ 文件到此处<br>或点击选择文件</div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:4px;">支持: .zip, .cbz, 图片文件, 文件夹</div>
+                    </div>
+                    <input type="file" id="conv-file-input" accept=".zip,.cbz,image/*" multiple style="display:none" />
+                    <input type="file" id="conv-dir-input" webkitdirectory directory multiple style="display:none" />
+                    <div class="conv-file-name" id="conv-file-name"></div>
+                </div>
+                <div class="conv-section">
+                    <div class="conv-section-label">输出选项</div>
+                    <div class="conv-row">
+                        <label>标题</label>
+                        <input type="text" id="conv-title" placeholder="漫画标题（可选）" />
+                    </div>
+                    <div class="conv-row">
+                        <label>作者</label>
+                        <input type="text" id="conv-author" placeholder="作者（可选）" />
+                    </div>
+                    <div class="conv-row">
+                        <label>压缩</label>
+                        <select id="conv-compress">
+                            <option value="1" selected>zlib (推荐)</option>
+                            <option value="0">不压缩</option>
+                        </select>
+                    </div>
+                    <div class="conv-checks">
+                        <label><input type="checkbox" id="conv-thumbnails" checked /> 生成缩略图</label>
+                        <label><input type="checkbox" id="conv-rtl" /> 从右到左 (日漫)</label>
+                        <label><input type="checkbox" id="conv-encrypt" /> 加密 (AES-256-GCM)</label>
+                    </div>
+                    <div class="conv-row" id="conv-pwd-row" style="display:none">
+                        <label>密码</label>
+                        <input type="password" id="conv-password" placeholder="输入加密密码" />
+                    </div>
+                </div>
+                <div class="conv-progress" id="conv-progress">
+                    <div class="conv-progress-bar">
+                        <div class="fill" id="conv-progress-fill"></div>
+                    </div>
+                    <div class="conv-progress-text" id="conv-progress-text">准备中...</div>
+                </div>
+                <div class="conv-stats" id="conv-stats"></div>
+            </div>
+            <div class="conv-footer">
+                <button class="conv-btn secondary" id="conv-dir-btn">📁 选择文件夹</button>
+                <div style="flex:1"></div>
+                <button class="conv-btn secondary" id="convert-cancel">取消</button>
+                <button class="conv-btn primary" id="convert-start" disabled>⚡ 开始转换</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  CMX Binary Format Constants
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        const MAGIC_HEADER = new Uint8Array([0x43, 0x4D, 0x58, 0x21]); // "CMX!"
+        const MAGIC_FOOTER = new Uint8Array([0x43, 0x4D, 0x58, 0x7E]); // "CMX~"
+        const HEADER_SIZE = 64;
+        const FOOTER_SIZE = 32;
+        const INDEX_ENTRY_SIZE = 48;
+
+        const FLAG_ENCRYPTED = 0x01;
+        const FLAG_THUMBNAILS = 0x02;
+        const FLAG_METADATA = 0x04;
+        const FLAG_RTL = 0x08;
+
+        const COMPRESS_NONE = 0;
+        const COMPRESS_ZLIB = 1;
+        const COMPRESS_ZSTD = 2;
+        const COMPRESS_LZ4 = 3;
+
+        const ENCRYPT_NONE = 0;
+        const ENCRYPT_AES_GCM = 1;
+
+        const IMG_CODE_MAP = { 0: 'jpg', 1: 'png', 2: 'webp', 3: 'avif' };
+        const IMG_MIME_MAP = { 0: 'image/jpeg', 1: 'image/png', 2: 'image/webp', 3: 'image/avif' };
+
+        const NONCE_SIZE = 12;
+        const GCM_TAG_SIZE = 16;
+        const ENCRYPT_OVERHEAD = NONCE_SIZE + GCM_TAG_SIZE;
+        const SALT_SIZE = 16;
+
+        const COMPRESSION_NAMES = { 0: 'None', 1: 'zlib', 2: 'zstd', 3: 'lz4' };
+        const ENCRYPTION_NAMES = { 0: 'None', 1: 'AES-256-GCM' };
+
+        const VERSION_MAJOR = 1;
+        const VERSION_MINOR = 0;
+        const PAGE_NORMAL = 0;
+        const PAGE_COVER = 1;
+        const THUMBNAIL_W = 120;
+        const THUMBNAIL_H = 170;
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Pure JavaScript MD5 (for CMX integrity verification)
+        //  Web Crypto API does not support MD5, so we implement it here.
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function md5(data) {
+            const hex = md5hex(data);
+            const bytes = new Uint8Array(16);
+            for (let i = 0; i < 16; i++) {
+                bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+            }
+            return bytes;
+        }
+
+        function md5hex(data) {
+            const msg = new Uint8Array(data);
+            const msgLen = msg.length;
+            const paddedLen = (((msgLen + 8) >>> 6) << 6) + 64;
+            const padded = new Uint8Array(paddedLen);
+            padded.set(msg);
+            padded[msgLen] = 0x80;
+            const view = new DataView(padded.buffer);
+            view.setUint32(paddedLen - 8, (msgLen << 3) >>> 0, true);
+            view.setUint32(paddedLen - 4, (msgLen >>> 29) >>> 0, true);
+
+            let a = 0x67452301, b = 0xEFCDAB89, c = 0x98BADCFE, d = 0x10325476;
+
+            const S = [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+                5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+                4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+                6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21];
+            const K = [];
+            for (let i = 0; i < 64; i++) {
+                K[i] = (Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296)) >>> 0;
+            }
+
+            for (let i = 0; i < paddedLen; i += 64) {
+                const M = new Uint32Array(16);
+                for (let j = 0; j < 16; j++) {
+                    M[j] = view.getUint32(i + j * 4, true);
+                }
+                let A = a, B = b, C = c, D = d;
+                for (let j = 0; j < 64; j++) {
+                    let F, g;
+                    if (j < 16) { F = (B & C) | (~B & D); g = j; }
+                    else if (j < 32) { F = (D & B) | (~D & C); g = (5 * j + 1) % 16; }
+                    else if (j < 48) { F = B ^ C ^ D; g = (3 * j + 5) % 16; }
+                    else { F = C ^ (B | ~D); g = (7 * j) % 16; }
+                    F = (F + A + K[j] + M[g]) >>> 0;
+                    A = D; D = C; C = B;
+                    B = (B + ((F << S[j]) | (F >>> (32 - S[j])))) >>> 0;
+                }
+                a = (a + A) >>> 0; b = (b + B) >>> 0;
+                c = (c + C) >>> 0; d = (d + D) >>> 0;
+            }
+
+            const result = new Uint8Array(16);
+            const outView = new DataView(result.buffer);
+            outView.setUint32(0, a, true);
+            outView.setUint32(4, b, true);
+            outView.setUint32(8, c, true);
+            outView.setUint32(12, d, true);
+            return Array.from(result).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  CMX Binary Reader (Pure JavaScript)
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        class CMXReader {
+            constructor(buffer) {
+                this._buffer = buffer;
+                this._view = new DataView(buffer);
+                this._parseHeader();
+                this._encKey = null;
+            }
+
+            _parseHeader() {
+                const v = this._view;
+                const magic = new Uint8Array(this._buffer, 0, 4);
+                if (!magic.every((b, i) => b === MAGIC_HEADER[i])) {
+                    throw new Error('无效的 CMX 文件（魔数不匹配）');
+                }
+                this.versionMajor = v.getUint16(4, false);
+                this.versionMinor = v.getUint16(6, false);
+                this._totalSize = Number(v.getBigUint64(8, false));
+                this._offMeta = Number(v.getBigUint64(16, false));
+                this._offIndex = Number(v.getBigUint64(24, false));
+                this._offThumbs = Number(v.getBigUint64(32, false));
+                this._offImages = Number(v.getBigUint64(40, false));
+                this.pageCount = v.getUint32(48, false);
+                this._flags = v.getUint8(52);
+                this._compression = v.getUint8(53);
+                this._encryption = v.getUint8(54);
+            }
+
+            get isEncrypted() { return !!(this._flags & FLAG_ENCRYPTED); }
+            get hasThumbnails() { return !!(this._flags & FLAG_THUMBNAILS); }
+            get isRTL() { return !!(this._flags & FLAG_RTL); }
+            get hasMetadata() { return !!(this._flags & FLAG_METADATA); }
+            get compression() { return this._compression; }
+            get encryption() { return this._encryption; }
+            get fileSize() { return this._totalSize; }
+
+            getEntry(page) {
+                if (page < 0 || page >= this.pageCount) {
+                    throw new Error(`页面 ${page} 超出范围 [0, ${this.pageCount})`);
+                }
+                const off = this._offIndex + page * INDEX_ENTRY_SIZE;
+                const v = this._view;
+                return {
+                    dataOffset: Number(v.getBigUint64(off, false)),
+                    rawSize: v.getUint32(off + 8, false),
+                    compressedSize: v.getUint32(off + 12, false),
+                    thumbOffset: v.getUint32(off + 16, false),
+                    thumbSize: v.getUint16(off + 20, false),
+                    width: v.getUint16(off + 22, false),
+                    height: v.getUint16(off + 24, false),
+                    imgFormat: v.getUint8(off + 26),
+                    pageType: v.getUint8(off + 27),
+                };
+            }
+
+            _storedSize(compressedSize, rawSize) {
+                const plainLen = compressedSize > 0 ? compressedSize : rawSize;
+                return this._encryption === ENCRYPT_AES_GCM ? plainLen + ENCRYPT_OVERHEAD : plainLen;
+            }
+
+            async getPage(page) {
+                const entry = this.getEntry(page);
+                const readSz = this._storedSize(entry.compressedSize, entry.rawSize);
+                let data = new Uint8Array(this._buffer, entry.dataOffset, readSz);
+
+                if (this._encryption === ENCRYPT_AES_GCM) {
+                    if (!this._encKey) throw new Error(`页面 ${page} 已加密但未提供密码`);
+                    const nonce = data.slice(0, NONCE_SIZE);
+                    const ciphertext = data.slice(NONCE_SIZE);
+                    try {
+                        const plaintext = await crypto.subtle.decrypt(
+                            { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+                            this._encKey, ciphertext
+                        );
+                        data = new Uint8Array(plaintext);
+                    } catch (e) {
+                        throw new Error(`页面 ${page} 解密失败: 密码错误或数据损坏`);
+                    }
+                }
+
+                if (entry.compressedSize > 0) {
+                    data = this._decompress(data, entry.rawSize);
+                }
+
+                return { data, imgFormat: entry.imgFormat, width: entry.width, height: entry.height };
+            }
+
+            _decompress(data, rawSize) {
+                if (this._compression === COMPRESS_ZLIB) {
+                    try {
+                        return pako.inflate(data, { to: 'uint8array' });
+                    } catch (e) {
+                        throw new Error('zlib 解压失败: ' + e.message);
+                    }
+                }
+                if (this._compression === COMPRESS_NONE) {
+                    return data;
+                }
+                throw new Error(`不支持的压缩格式: ${COMPRESSION_NAMES[this._compression] || '未知'}。当前仅支持 zlib 压缩。`);
+            }
+
+            getThumbnail(page) {
+                if (!this.hasThumbnails) return null;
+                const entry = this.getEntry(page);
+                if (!entry.thumbSize || !this._offThumbs) return null;
+                return new Uint8Array(this._buffer, entry.thumbOffset, entry.thumbSize);
+            }
+
+            getMetadata() {
+                if (!this.hasMetadata) return null;
+                const v = this._view;
+                const metaSize = v.getUint32(this._offMeta, false);
+                const jsonLen = v.getUint32(this._offMeta + 4, false);
+                const jsonBytes = new Uint8Array(this._buffer, this._offMeta + 8, jsonLen);
+                const decoder = new TextDecoder('utf-8');
+                try {
+                    return JSON.parse(decoder.decode(jsonBytes));
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            async deriveKey(password) {
+                if (this._encryption !== ENCRYPT_AES_GCM) return true;
+                const saltOffset = this._totalSize - SALT_SIZE;
+                const salt = new Uint8Array(this._buffer, saltOffset, SALT_SIZE);
+
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+                );
+                this._encKey = await crypto.subtle.deriveKey(
+                    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+                    keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+                );
+                return true;
+            }
+
+            async verify() {
+                const bodyEnd = this._totalSize - FOOTER_SIZE - (this.isEncrypted ? SALT_SIZE : 0);
+                const body = new Uint8Array(this._buffer, 0, bodyEnd);
+                const expected = md5(body);
+                const footerOff = bodyEnd;
+                const footerMagic = new Uint8Array(this._buffer, footerOff, 4);
+                const footerHash = new Uint8Array(this._buffer, footerOff + 8, 16);
+                if (!footerMagic.every((b, i) => b === MAGIC_FOOTER[i])) return false;
+                return footerHash.every((b, i) => b === expected[i]);
+            }
+
+            getInfo() {
+                const meta = this.getMetadata();
+                return {
+                    version: `${this.versionMajor}.${this.versionMinor}`,
+                    pageCount: this.pageCount,
+                    encrypted: this.isEncrypted,
+                    encryption: ENCRYPTION_NAMES[this._encryption] || 'Unknown',
+                    compression: COMPRESSION_NAMES[this._compression] || 'Unknown',
+                    hasThumbnails: this.hasThumbnails,
+                    hasMetadata: this.hasMetadata,
+                    fileSize: this._totalSize,
+                    rtl: this.isRTL,
+                    title: meta?.title || '',
+                    author: meta?.author?.join(', ') || '',
+                    language: meta?.language || '',
+                    originalFormat: meta?.original_format || '',
+                    description: meta?.description || '',
+                    created: meta?.created_at || '',
+                };
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  UI State
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        const state = {
+            reader: null,
+            currentPage: 0,
+            totalPages: 0,
+            doubleMode: true,
+            rtlMode: true,        // default RTL for manga
+            firstAlone: true,
+            zoom: 1.0,
+            bookTitle: '',
+            thumbsOpen: false,
+            settingsOpen: false,
+            immersive: false,
+            fileName: '',
+            pageCache: new Map(),
+            MAX_CACHE: 16,
+        };
+
+        const $ = id => document.getElementById(id);
+        const viewer = $('viewer');
+        const pagesContainer = $('pages-container');
+        const welcome = $('welcome');
+        const loading = $('loading');
+        const loadText = $('load-text');
+        const pageInfo = $('page-info');
+        const bookTitle = $('book-title');
+        const thumbList = $('thumb-list');
+        const thumbPanel = $('thumb-panel');
+        const zoomVal = $('zoom-val');
+        let zoomTimer = null;
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Toast
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function toast(msg, type = '') {
+            const el = document.createElement('div');
+            el.className = 'toast ' + type;
+            el.textContent = msg;
+            $('toast-area').appendChild(el);
+            setTimeout(() => {
+                el.style.animation = 'toastOut .3s ease forwards';
+                setTimeout(() => el.remove(), 300);
+            }, 3000);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Navigation
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Page Navigation
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        $('open-file-btn').onclick = () => $('file-input').click();
+        $('welcome-open-btn').onclick = () => $('file-input').click();
+
+        $('file-input').onchange = e => {
+            const file = e.target.files[0];
+            if (file) openCMXFile(file);
+            e.target.value = '';
+        };
+
+        viewer.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+        viewer.addEventListener('drop', e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.toLowerCase().endsWith('.cmx')) {
+                openCMXFile(file);
+            } else {
+                toast('仅支持 .cmx 格式文件', 'error');
+            }
+        });
+
+        async function openCMXFile(file) {
+            showLoading('正在读取: ' + file.name);
+            state.fileName = file.name;
+            state.bookTitle = file.name.replace(/\.cmx$/i, '');
+            bookTitle.textContent = state.bookTitle;
+
+            try {
+                const buffer = await file.arrayBuffer();
+                const reader = new CMXReader(buffer);
+
+                if (reader.isEncrypted) {
+                    hideLoading();
+                    const password = await showPasswordDialog(file.name);
+                    if (!password) {
+                        welcome.classList.remove('hidden');
+                        return;
+                    }
+                    showLoading('正在解密: ' + file.name);
+                    try {
+                        await reader.deriveKey(password);
+                        await reader.getPage(0);
+                    } catch (e) {
+                        hideLoading();
+                        toast('密码错误或文件损坏', 'error');
+                        welcome.classList.remove('hidden');
+                        return;
+                    }
+                }
+
+                state.reader = reader;
+                state.totalPages = reader.pageCount;
+                state.currentPage = 0;
+
+                if (reader.isRTL) {
+                    setDir(true);
+                }
+
+                state.pageCache.clear();
+                renderPage();
+                buildThumbs();
+                hideLoading();
+                toast(`已打开: ${state.bookTitle} (${state.totalPages} 页)`, 'success');
+            } catch (err) {
+                console.error(err);
+                toast('打开失败: ' + err.message, 'error');
+                hideLoading();
+                welcome.classList.remove('hidden');
+            }
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Password Dialog
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function showPasswordDialog(filename) {
+            return new Promise(resolve => {
+                $('pwd-filename').textContent = filename;
+                $('pwd-input').value = '';
+                $('pwd-error').style.display = 'none';
+                $('pwd-input').type = 'password';
+                $('pwd-toggle').textContent = '👁';
+                $('password-overlay').classList.add('open');
+                $('pwd-input').focus();
+
+                function cleanup() {
+                    $('password-overlay').classList.remove('open');
+                    $('pwd-confirm').onclick = null;
+                    $('pwd-cancel').onclick = null;
+                    $('pwd-toggle').onclick = null;
+                    $('pwd-input').onkeydown = null;
+                }
+
+                function confirm() {
+                    const pw = $('pwd-input').value;
+                    if (pw) {
+                        cleanup();
+                        resolve(pw);
+                    }
+                }
+
+                $('pwd-confirm').onclick = confirm;
+                $('pwd-cancel').onclick = () => { cleanup(); resolve(null); };
+                $('pwd-toggle').onclick = () => {
+                    const isPw = $('pwd-input').type === 'password';
+                    $('pwd-input').type = isPw ? 'text' : 'password';
+                    $('pwd-toggle').textContent = isPw ? '🙈' : '👁';
+                };
+                $('pwd-input').onkeydown = e => {
+                    if (e.key === 'Enter') confirm();
+                    if (e.key === 'Escape') { cleanup(); resolve(null); }
+                };
+            });
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Page Loading & Rendering
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        async function loadPageData(page) {
+            if (state.pageCache.has(page)) {
+                return state.pageCache.get(page);
+            }
+            const result = await state.reader.getPage(page);
+            const mime = IMG_MIME_MAP[result.imgFormat] || 'image/jpeg';
+            const blob = new Blob([result.data], { type: mime });
+            const url = URL.createObjectURL(blob);
+            const cached = { url, width: result.width, height: result.height };
+            if (state.pageCache.size >= state.MAX_CACHE) {
+                const firstKey = state.pageCache.keys().next().value;
+                const old = state.pageCache.get(firstKey);
+                if (old) URL.revokeObjectURL(old.url);
+                state.pageCache.delete(firstKey);
+            }
+            state.pageCache.set(page, cached);
+            return cached;
+        }
+
+        function getPageIndices() {
+            const p = state.currentPage;
+            if (!state.doubleMode) return [p];
+            if (state.firstAlone && p === 0) return [0];
+            if (p % 2 === 0 && state.firstAlone) {
+                return [p, p + 1].filter(i => i < state.totalPages);
+            }
+            if (!state.firstAlone) {
+                if (p % 2 === 0) return [p, p + 1].filter(i => i < state.totalPages);
+                return [p - 1, p].filter(i => i < state.totalPages);
+            }
+            return [p, p + 1].filter(i => i < state.totalPages);
+        }
+
+        async function renderPage() {
+            if (!state.totalPages || !state.reader) return;
+            pagesContainer.innerHTML = '';
+            updatePageInfo();
+            updateButtons();
+
+            const indices = getPageIndices();
+
+            if (state.doubleMode && indices.length === 2) {
+                const pairContainer = document.createElement('div');
+                pairContainer.className = 'page-pair-container';
+                pairContainer.style.transform = `scale(${state.zoom})`;
+                pairContainer.style.transformOrigin = 'top center';
+                pairContainer.style.flexShrink = '0';
+
+                let displayOrder = [...indices];
+                if (state.rtlMode) displayOrder = [indices[1], indices[0]];
+
+                for (const idx of displayOrder) {
+                    if (idx < 0 || idx >= state.totalPages) continue;
+                    const img = document.createElement('img');
+                    img.className = 'page-img';
+                    img.style.opacity = '0';
+                    img.style.transition = 'opacity .2s';
+                    pairContainer.appendChild(img);
+
+                    (async () => {
+                        try {
+                            const cached = await loadPageData(idx);
+                            img.onload = () => { img.style.opacity = '1'; };
+                            img.src = cached.url;
+                        } catch (e) {
+                            console.error('加载页面失败:', idx, e);
+                            toast(`加载第 ${idx + 1} 页失败`, 'error');
+                        }
+                    })();
+                }
+                pagesContainer.appendChild(pairContainer);
+            } else {
+                for (const idx of indices) {
+                    if (idx < 0 || idx >= state.totalPages) continue;
+                    const img = document.createElement('img');
+                    img.className = 'page-img';
+                    img.style.opacity = '0';
+                    img.style.transition = 'opacity .2s';
+                    img.style.transform = `scale(${state.zoom})`;
+                    img.style.transformOrigin = 'top center';
+                    img.style.flexShrink = '0';
+                    pagesContainer.appendChild(img);
+
+                    (async () => {
+                        try {
+                            const cached = await loadPageData(idx);
+                            img.onload = () => { img.style.opacity = '1'; };
+                            img.src = cached.url;
+                        } catch (e) {
+                            console.error('加载页面失败:', idx, e);
+                            toast(`加载第 ${idx + 1} 页失败`, 'error');
+                        }
+                    })();
+                }
+            }
+
+            syncThumbActive();
+            viewer.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function updatePageInfo() {
+            if (!state.totalPages) { pageInfo.textContent = '— / —'; return; }
+            const indices = getPageIndices();
+            if (indices.length === 1) {
+                pageInfo.textContent = `${indices[0] + 1} / ${state.totalPages}`;
+            } else {
+                const sorted = [...indices].sort((a, b) => a - b);
+                pageInfo.textContent = `${sorted[0] + 1}-${sorted[sorted.length - 1] + 1} / ${state.totalPages}`;
+            }
+        }
+
+        function updateButtons() {
+            $('prev-btn').disabled = state.currentPage === 0;
+            $('next-btn').disabled = state.currentPage >= state.totalPages - 1;
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Page Navigation
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function advancePage(dir) {
+            if (!state.totalPages) return;
+            const indices = getPageIndices();
+            const step = (state.doubleMode && indices.length === 2) ? 2 : 1;
+            if (dir > 0) {
+                state.currentPage = Math.min(state.currentPage + step, state.totalPages - 1);
+            } else {
+                state.currentPage = Math.max(state.currentPage - step, 0);
+            }
+            renderPage();
+        }
+
+        $('prev-btn').onclick = () => advancePage(-1);
+        $('next-btn').onclick = () => advancePage(1);
+
+        // Click viewer to advance
+        let hasDraggedRecently = false;
+        viewer.addEventListener('click', e => {
+            if (!$('toggle-click').checked) return;
+            if (!state.totalPages) return;
+            if (hasDraggedRecently) {
+                hasDraggedRecently = false;
+                e.stopPropagation();
+                e.preventDefault();
+                return;
+            }
+            const rect = viewer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const half = rect.width / 2;
+            if (state.rtlMode) {
+                if (x < half) advancePage(1);
+                else advancePage(-1);
+            } else {
+                if (x < half) advancePage(-1);
+                else advancePage(1);
+            }
+        });
+
+        // Mouse drag for panning when zoomed
+        let isDragging = false;
+        let dragStartX = 0, dragStartY = 0;
+        let initialScrollLeft = 0, initialScrollTop = 0;
+        const dragThreshold = 5;
+
+        viewer.addEventListener('mousedown', e => {
+            if (state.zoom > 1.0) {
+                isDragging = true;
+                hasDraggedRecently = false;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                initialScrollLeft = viewer.scrollLeft;
+                initialScrollTop = viewer.scrollTop;
+                viewer.classList.add('dragging');
+                viewer.classList.remove('grab');
+            }
+        });
+
+        viewer.addEventListener('mousemove', e => {
+            if (isDragging) {
+                const dx = e.clientX - dragStartX;
+                const dy = e.clientY - dragStartY;
+                if (Math.abs(dx) > dragThreshold || Math.abs(dy) > dragThreshold) {
+                    viewer.scrollLeft = initialScrollLeft - dx;
+                    viewer.scrollTop = initialScrollTop - dy;
+                    hasDraggedRecently = true;
+                }
+            } else if (state.zoom > 1.0) {
+                viewer.classList.add('grab');
+            } else {
+                viewer.classList.remove('grab');
+            }
+        });
+
+        viewer.addEventListener('mouseup', () => {
+            isDragging = false;
+            viewer.classList.remove('dragging');
+            viewer.classList.add('grab');
+        });
+        viewer.addEventListener('mouseleave', () => {
+            isDragging = false;
+            viewer.classList.remove('dragging', 'grab');
+        });
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Mode: Single / Double
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function setMode(double) {
+            state.doubleMode = double;
+            $('mode-single').classList.toggle('active', !double);
+            $('mode-double').classList.toggle('active', double);
+            $('toggle-double').checked = double;
+            renderPage();
+        }
+        $('mode-single').onclick = () => setMode(false);
+        $('mode-double').onclick = () => setMode(true);
+        $('toggle-double').onchange = e => setMode(e.target.checked);
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Direction: LTR / RTL
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function setDir(rtl) {
+            state.rtlMode = rtl;
+            $('dir-rtl').classList.toggle('active', rtl);
+            $('dir-ltr').classList.toggle('active', !rtl);
+            $('toggle-rtl').checked = rtl;
+            renderPage();
+        }
+        $('dir-rtl').onclick = () => setDir(true);
+        $('dir-ltr').onclick = () => setDir(false);
+        $('toggle-rtl').onchange = e => setDir(e.target.checked);
+
+        $('toggle-first-alone').onchange = e => {
+            state.firstAlone = e.target.checked;
+            renderPage();
+        };
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Zoom
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function setZoom(z) {
+            state.zoom = Math.max(0.5, Math.min(2.0, z));
+            $('zoom-slider').value = Math.round(state.zoom * 100);
+            $('zoom-disp').textContent = Math.round(state.zoom * 100) + '%';
+            $('zoom-reset-btn').textContent = Math.round(state.zoom * 100) + '%';
+
+            const pairContainer = $('pages-container').querySelector('.page-pair-container');
+            if (pairContainer) {
+                pairContainer.style.transform = `scale(${state.zoom})`;
+                pairContainer.style.transformOrigin = 'top center';
+            } else {
+                document.querySelectorAll('.page-img').forEach(img => {
+                    img.style.transform = `scale(${state.zoom})`;
+                    img.style.transformOrigin = 'top center';
+                });
+            }
+            showZoomVal();
+        }
+
+        function showZoomVal() {
+            zoomVal.textContent = Math.round(state.zoom * 100) + '%';
+            zoomVal.classList.add('show');
+            clearTimeout(zoomTimer);
+            zoomTimer = setTimeout(() => zoomVal.classList.remove('show'), 1500);
+        }
+
+        $('zoom-in-btn').onclick = () => setZoom(state.zoom + 0.1);
+        $('zoom-out-btn').onclick = () => setZoom(state.zoom - 0.1);
+        $('zoom-reset-btn').onclick = () => setZoom(1.0);
+        $('zoom-slider').oninput = e => setZoom(parseInt(e.target.value) / 100);
+
+        viewer.addEventListener('wheel', e => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+                setZoom(state.zoom - e.deltaY * 0.001);
+                return;
+            }
+            if (e.deltaY !== 0) {
+                e.preventDefault();
+                advancePage(e.deltaY > 0 ? 1 : -1);
+            }
+        }, { passive: false });
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Thumbnails
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function buildThumbs() {
+            thumbList.innerHTML = '';
+            if (!state.reader) return;
+            for (let i = 0; i < state.totalPages; i++) {
+                const item = document.createElement('div');
+                item.className = 'thumb-item';
+                item.dataset.idx = i;
+                const img = document.createElement('img');
+                img.alt = 'p' + (i + 1);
+                img.onerror = function () { this.style.display = 'none'; };
+                const num = document.createElement('div');
+                num.className = 'thumb-num';
+                num.textContent = i + 1;
+                item.appendChild(img);
+                item.appendChild(num);
+                item.onclick = () => { state.currentPage = i; renderPage(); };
+                thumbList.appendChild(item);
+
+                (async () => {
+                    try {
+                        if (state.reader.hasThumbnails) {
+                            const thumbData = state.reader.getThumbnail(i);
+                            if (thumbData) {
+                                const blob = new Blob([thumbData], { type: 'image/jpeg' });
+                                img.src = URL.createObjectURL(blob);
+                            } else {
+                                const cached = await loadPageData(i);
+                                img.src = cached.url;
+                            }
+                        } else {
+                            const cached = await loadPageData(i);
+                            img.src = cached.url;
+                        }
+                    } catch (e) {
+                        console.error('缩略图加载失败:', i, e);
+                        img.style.display = 'none';
+                    }
+                })();
+            }
+            syncThumbActive();
+        }
+
+        function syncThumbActive() {
+            document.querySelectorAll('.thumb-item').forEach(el => {
+                const idx = parseInt(el.dataset.idx);
+                const indices = getPageIndices();
+                el.classList.toggle('active', indices.includes(idx));
+            });
+            const active = thumbList.querySelector('.thumb-item.active');
+            if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
+        $('thumb-toggle-btn').onclick = toggleThumbPanel;
+        $('thumb-toggle-cmd').onclick = toggleThumbPanel;
+
+        function toggleThumbPanel() {
+            state.thumbsOpen = !state.thumbsOpen;
+            thumbPanel.classList.toggle('open', state.thumbsOpen);
+            $('thumb-toggle-btn').classList.toggle('active', state.thumbsOpen);
+            $('thumb-toggle-cmd').classList.toggle('active', state.thumbsOpen);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  File Info Dialog
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function showInfoDialog() {
+            if (!state.reader) {
+                toast('请先打开 CMX 文件', '');
+                return;
+            }
+            const info = state.reader.getInfo();
+            const rows = [
+                ['文件名', state.fileName],
+                ['标题', info.title || '—'],
+                ['作者', info.author || '—'],
+                ['语言', info.language || '—'],
+                ['CMX 版本', info.version],
+                ['页数', String(info.pageCount)],
+                ['加密', info.encrypted ? '是 (' + info.encryption + ')' : '否'],
+                ['压缩', info.compression],
+                ['内置缩略图', info.hasThumbnails ? '是' : '否'],
+                ['元数据', info.hasMetadata ? '是' : '否'],
+                ['阅读方向', info.rtl ? 'RTL (从右到左)' : 'LTR (从左到右)'],
+                ['原始格式', info.originalFormat || '—'],
+                ['文件大小', formatBytes(info.fileSize)],
+                ['创建时间', info.created || '—'],
+                ['简介', info.description || '—'],
+            ];
+            $('info-table').innerHTML = rows.map(([k, v]) =>
+                `<tr><td>${k}</td><td>${v}</td></tr>`
+            ).join('');
+            $('info-overlay').classList.add('open');
+        }
+
+        function formatBytes(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+            return (b / 1024 / 1024).toFixed(1) + ' MB';
+        }
+
+        $('info-btn').onclick = showInfoDialog;
+        $('info-cmd').onclick = showInfoDialog;
+        $('info-close').onclick = () => $('info-overlay').classList.remove('open');
+        $('info-close-btn').onclick = () => $('info-overlay').classList.remove('open');
+        $('info-overlay').onclick = e => {
+            if (e.target === $('info-overlay')) $('info-overlay').classList.remove('open');
+        };
+
+        $('info-verify-btn').onclick = async () => {
+            if (!state.reader) return;
+            $('info-verify-btn').disabled = true;
+            $('info-verify-btn').textContent = '⏳ 验证中...';
+            try {
+                const valid = await state.reader.verify();
+                if (valid) toast('✅ CMX 文件完整性校验通过', 'success');
+                else toast('❌ CMX 文件完整性校验失败（数据可能已损坏）', 'error');
+            } catch (e) {
+                toast('校验出错: ' + e.message, 'error');
+            }
+            $('info-verify-btn').disabled = false;
+            $('info-verify-btn').textContent = '🔍 验证完整性';
+        };
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Settings
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        $('settings-btn').onclick = () => {
+            $('settings-overlay').classList.add('open');
+            state.settingsOpen = true;
+        };
+        $('close-settings').onclick = () => {
+            $('settings-overlay').classList.remove('open');
+            state.settingsOpen = false;
+        };
+        $('settings-bg').onclick = () => {
+            $('settings-overlay').classList.remove('open');
+            state.settingsOpen = false;
+        };
+
+        $('toggle-bg').onchange = e => {
+            const dark = e.target.checked;
+            document.documentElement.style.setProperty('--bg0', dark ? '#1c1c1c' : '#f5f5f5');
+            document.documentElement.style.setProperty('--text1', dark ? '#ffffff' : '#1a1a1a');
+            viewer.style.background = dark ? 'var(--bg0)' : '#e8e8e8';
+        };
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Loading Helpers
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function showLoading(msg = '正在加载...') {
+            loadText.textContent = msg;
+            loading.classList.add('show');
+            welcome.classList.add('hidden');
+            pagesContainer.innerHTML = '';
+        }
+        function hideLoading() {
+            loading.classList.remove('show');
+            if (state.totalPages > 0) welcome.classList.add('hidden');
+            else welcome.classList.remove('hidden');
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Keyboard Shortcuts
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        document.addEventListener('keydown', e => {
+            if (!$('toggle-keys').checked) return;
+            if (e.target.tagName === 'INPUT') return;
+            switch (e.key) {
+                case 'ArrowRight': advancePage(state.rtlMode ? -1 : 1); break;
+                case 'ArrowLeft': advancePage(state.rtlMode ? 1 : -1); break;
+                case 'ArrowDown': case 'PageDown': advancePage(1); break;
+                case 'ArrowUp': case 'PageUp': advancePage(-1); break;
+                case 'Home': state.currentPage = 0; renderPage(); break;
+                case 'End': state.currentPage = state.totalPages - 1; renderPage(); break;
+                case ' ': e.preventDefault(); advancePage(1); break;
+                case '+': case '=': setZoom(state.zoom + 0.1); break;
+                case '-': setZoom(state.zoom - 0.1); break;
+                case '0': setZoom(1.0); break;
+                case 'f': case 'F': toggleImmersive(); break;
+                case 'F11': break; // 浏览器原生处理，不干预
+                case 'Escape':
+                    if ($('convert-overlay').classList.contains('open')) {
+                        $('convert-overlay').classList.remove('open');
+                    } else if ($('about-overlay').classList.contains('open')) {
+                        $('about-overlay').classList.remove('open');
+                    } else if (state.settingsOpen) {
+                        $('close-settings').click();
+                    } else if ($('info-overlay').classList.contains('open')) {
+                        $('info-overlay').classList.remove('open');
+                    } else if (state.immersive) {
+                        toggleImmersive();
+                    } else if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    }
+                    break;
+                case 'i': case 'I':
+                    if (e.ctrlKey) { e.preventDefault(); showInfoDialog(); }
+                    break;
+                case 'd': case 'D':
+                    if (e.ctrlKey) { e.preventDefault(); setMode(!state.doubleMode); }
+                    break;
+                case 'r': case 'R':
+                    if (e.ctrlKey) { e.preventDefault(); setDir(!state.rtlMode); }
+                    break;
+                case 'o': case 'O':
+                    if (e.ctrlKey) { e.preventDefault(); $('file-input').click(); }
+                    break;
+            }
+        });
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Fullscreen
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        function toggleImmersive() {
+            state.immersive = !state.immersive;
+            if (state.immersive) {
+                document.body.classList.add('immersive');
+            } else {
+                document.body.classList.remove('immersive');
+            }
+        }
+
+        function toggleBrowserFullscreen() {
+            if (!document.fullscreenElement) {
+                document.body.requestFullscreen().catch(() => { });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (document.fullscreenElement) {
+                $('topbar').style.display = 'none';
+                $('cmdbar').style.display = 'none';
+                $('thumb-panel').style.display = 'none';
+                $('viewer').style.padding = '0';
+                $('viewer').style.background = '#000';
+                $('shell').style.top = '0';
+            } else {
+                if (state.immersive) {
+                    $('topbar').style.display = '';
+                    $('cmdbar').style.display = '';
+                    $('thumb-panel').style.display = '';
+                    $('viewer').style.padding = '';
+                    $('viewer').style.background = '';
+                    $('shell').style.top = '';
+                } else {
+                    $('topbar').style.display = 'flex';
+                    $('cmdbar').style.display = 'flex';
+                    $('thumb-panel').style.display = '';
+                    $('viewer').style.padding = '';
+                    $('viewer').style.background = '';
+                    $('shell').style.top = '';
+                }
+            }
+        });
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  CMX Binary Writer (Pure JavaScript)
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        class CMXWriter {
+            constructor() {
+                this._entries = [];
+                this._thumbPool = new Uint8Array(0);
+                this._imagePool = new Uint8Array(0);
+                this._metadata = null;
+                this._flags = 0;
+                this._compression = COMPRESS_ZLIB;
+                this._password = null;
+            }
+
+            addPage(data, imgFormat, width, height, thumbData) {
+                const rawSize = data.byteLength;
+                let compressedSize = 0;
+                if (this._compression === COMPRESS_ZLIB) {
+                    const compressed = pako.deflate(new Uint8Array(data), { level: 6 });
+                    if (compressed.length < rawSize) {
+                        data = compressed.buffer;
+                        compressedSize = compressed.length;
+                    }
+                }
+                const dataOffset = this._imagePool.byteLength;
+                this._imagePool = _concatBuf(this._imagePool, data);
+
+                let tOff = 0, tSize = 0;
+                if (thumbData) {
+                    tOff = this._thumbPool.byteLength;
+                    tSize = thumbData.byteLength;
+                    this._thumbPool = _concatBuf(this._thumbPool, thumbData);
+                }
+
+                this._entries.push({
+                    dataOffset, rawSize, compressedSize,
+                    thumbOffset: tOff, thumbSize: tSize,
+                    width: width || 0, height: height || 0,
+                    imgFormat: imgFormat || 0, pageType: PAGE_NORMAL,
+                });
+            }
+
+            setMetadata(meta) {
+                this._metadata = meta;
+            }
+
+            setFlags(flags) {
+                this._flags = flags;
+            }
+
+            setCompression(comp) {
+                this._compression = comp;
+            }
+
+            async finalize(password) {
+                let flags = this._flags;
+                if (this._metadata) flags |= FLAG_METADATA;
+                if (this._thumbPool.byteLength > 0) flags |= FLAG_THUMBNAILS;
+
+                const entries = this._entries;
+                const pageCount = entries.length;
+
+                const metaBlock = this._metadata
+                    ? (() => {
+                        const json = new TextEncoder().encode(JSON.stringify(this._metadata));
+                        const buf = new ArrayBuffer(8 + json.length);
+                        const v = new DataView(buf);
+                        v.setUint32(0, 8 + json.length, false);
+                        v.setUint32(4, json.length, false);
+                        new Uint8Array(buf, 8).set(json);
+                        return buf;
+                    })()
+                    : new ArrayBuffer(0);
+
+                const offMeta = HEADER_SIZE;
+                const offIndex = offMeta + metaBlock.byteLength;
+                const offThumbs = offIndex + pageCount * INDEX_ENTRY_SIZE;
+                const offImages = offThumbs + this._thumbPool.byteLength;
+
+                const idxData = new ArrayBuffer(pageCount * INDEX_ENTRY_SIZE);
+                const idxView = new DataView(idxData);
+                const checksum = new Uint8Array(16);
+                for (let i = 0; i < pageCount; i++) {
+                    const e = entries[i];
+                    const off = i * INDEX_ENTRY_SIZE;
+                    idxView.setBigUint64(off, BigInt(offImages + e.dataOffset), false);
+                    idxView.setUint32(off + 8, e.rawSize, false);
+                    idxView.setUint32(off + 12, e.compressedSize, false);
+                    idxView.setUint32(off + 16, e.thumbSize ? offThumbs + e.thumbOffset : 0, false);
+                    idxView.setUint16(off + 20, e.thumbSize, false);
+                    idxView.setUint16(off + 22, e.width, false);
+                    idxView.setUint16(off + 24, e.height, false);
+                    idxView.setUint8(off + 26, e.imgFormat);
+                    idxView.setUint8(off + 27, e.pageType);
+                    new Uint8Array(idxData, off + 30, 16).set(checksum);
+                    const pad16 = new Uint8Array(idxData, off + 46, 2);
+                    pad16[0] = 0; pad16[1] = 2;
+                }
+
+                const totalSize = offImages + this._imagePool.byteLength + FOOTER_SIZE
+                    + (password ? SALT_SIZE : 0);
+                const hdr = new ArrayBuffer(HEADER_SIZE);
+                const hv = new DataView(hdr);
+                new Uint8Array(hdr, 0, 4).set(MAGIC_HEADER);
+                hv.setUint16(4, VERSION_MAJOR, false);
+                hv.setUint16(6, VERSION_MINOR, false);
+                hv.setBigUint64(8, BigInt(totalSize), false);
+                hv.setBigUint64(16, BigInt(metaBlock.byteLength ? offMeta : 0), false);
+                hv.setBigUint64(24, BigInt(offIndex), false);
+                hv.setBigUint64(32, BigInt(this._thumbPool.byteLength ? offThumbs : 0), false);
+                hv.setBigUint64(40, BigInt(offImages), false);
+                hv.setUint32(48, pageCount, false);
+                hv.setUint8(52, flags);
+                hv.setUint8(53, this._compression);
+                hv.setUint8(54, password ? ENCRYPT_AES_GCM : ENCRYPT_NONE);
+
+                const bodyParts = [hdr, metaBlock, idxData, this._thumbPool, this._imagePool];
+                let body = _concatBufs(bodyParts);
+
+                if (password) {
+                    const salt = crypto.getRandomValues(new Uint8Array(SALT_SIZE));
+                    const keyMaterial = await crypto.subtle.importKey(
+                        'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']
+                    );
+                    const encKey = await crypto.subtle.deriveKey(
+                        { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+                        keyMaterial, { name: 'AES-GCM', length: 256 }, false, ['encrypt']
+                    );
+                    const nonce = crypto.getRandomValues(new Uint8Array(NONCE_SIZE));
+                    const ciphertext = await crypto.subtle.encrypt(
+                        { name: 'AES-GCM', iv: nonce, tagLength: 128 }, encKey, body
+                    );
+                    const encrypted = new Uint8Array(nonce.byteLength + ciphertext.byteLength);
+                    encrypted.set(nonce, 0);
+                    encrypted.set(new Uint8Array(ciphertext), nonce.byteLength);
+                    body = encrypted.buffer;
+                }
+
+                const footer = new ArrayBuffer(FOOTER_SIZE);
+                const fv = new DataView(footer);
+                new Uint8Array(footer, 0, 4).set(MAGIC_FOOTER);
+                fv.setUint32(4, FOOTER_SIZE, false);
+                const bodyHash = md5(body);
+                new Uint8Array(footer, 8, 16).set(bodyHash);
+
+                const finalParts = [body, footer];
+                if (password) {
+                    const salt = crypto.getRandomValues(new Uint8Array(SALT_SIZE));
+                    finalParts.push(salt.buffer);
+                }
+                return _concatBufs(finalParts);
+            }
+        }
+
+        function _concatBuf(a, b) {
+            const c = new Uint8Array(a.byteLength + b.byteLength);
+            c.set(new Uint8Array(a), 0);
+            c.set(new Uint8Array(b), a.byteLength);
+            return c.buffer;
+        }
+
+        function _concatBufs(bufs) {
+            let total = 0;
+            for (const b of bufs) total += b.byteLength;
+            const result = new Uint8Array(total);
+            let offset = 0;
+            for (const b of bufs) {
+                result.set(new Uint8Array(b), offset);
+                offset += b.byteLength;
+            }
+            return result.buffer;
+        }
+
+        function _makeThumbFromImage(data) {
+            return new Promise((resolve) => {
+                const blob = new Blob([data]);
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = THUMBNAIL_W;
+                    canvas.height = THUMBNAIL_H;
+                    const ctx = canvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, THUMBNAIL_W, THUMBNAIL_H);
+                    const ratio = Math.min(THUMBNAIL_W / img.width, THUMBNAIL_H / img.height);
+                    const dw = img.width * ratio, dh = img.height * ratio;
+                    const dx = (THUMBNAIL_W - dw) / 2, dy = (THUMBNAIL_H - dh) / 2;
+                    ctx.drawImage(img, dx, dy, dw, dh);
+                    canvas.toBlob(b => {
+                        if (b) b.arrayBuffer().then(buf => resolve(new Uint8Array(buf)));
+                        else resolve(null);
+                    }, 'image/jpeg', 0.72);
+                };
+                img.onerror = () => resolve(null);
+                img.src = URL.createObjectURL(blob);
+            });
+        }
+
+        function _getImageInfo(data) {
+            return new Promise((resolve) => {
+                const blob = new Blob([data]);
+                const img = new Image();
+                img.onload = () => {
+                    resolve({ width: img.width, height: img.height });
+                    URL.revokeObjectURL(img.src);
+                };
+                img.onerror = () => resolve({ width: 0, height: 0 });
+                img.src = URL.createObjectURL(blob);
+            });
+        }
+
+        function _imgFormatFromName(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            const map = { jpg: 0, jpeg: 0, png: 1, webp: 2, avif: 3 };
+            return map[ext] !== undefined ? map[ext] : 0;
+        }
+
+        function _isImageFile(name) {
+            const ext = name.split('.').pop().toLowerCase();
+            return ['jpg', 'jpeg', 'png', 'webp', 'avif', 'bmp', 'gif'].includes(ext);
+        }
+
+        function _naturalSort(a, b) {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        }
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  About Dialog
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        $('open-about-btn').onclick = () => {
+            $('settings-overlay').classList.remove('open');
+            state.settingsOpen = false;
+            $('about-overlay').classList.add('open');
+        };
+
+        $('about-close').onclick = () => $('about-overlay').classList.remove('open');
+        $('about-ok-btn').onclick = () => $('about-overlay').classList.remove('open');
+        $('about-overlay').onclick = e => {
+            if (e.target === $('about-overlay')) $('about-overlay').classList.remove('open');
+        };
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Converter UI Logic
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        const convState = {
+            sourceFiles: null,
+            sourceName: '',
+            isZip: false,
+        };
+
+        $('open-converter-btn').onclick = () => {
+            $('convert-overlay').classList.add('open');
+            resetConverter();
+        };
+
+        $('convert-close').onclick = () => $('convert-overlay').classList.remove('open');
+        $('convert-cancel').onclick = () => $('convert-overlay').classList.remove('open');
+        $('convert-overlay').onclick = e => {
+            if (e.target === $('convert-overlay')) $('convert-overlay').classList.remove('open');
+        };
+
+        $('conv-encrypt').onchange = e => {
+            $('conv-pwd-row').style.display = e.target.checked ? 'flex' : 'none';
+        };
+
+        function resetConverter() {
+            convState.sourceFiles = null;
+            convState.sourceName = '';
+            convState.isZip = false;
+            $('conv-file-name').classList.remove('show');
+            $('conv-file-name').textContent = '';
+            $('conv-progress').classList.remove('show');
+            $('conv-stats').classList.remove('show');
+            $('convert-start').disabled = true;
+            $('convert-start').textContent = '⚡ 开始转换';
+            $('conv-title').value = '';
+            $('conv-author').value = '';
+            $('conv-password').value = '';
+            $('conv-encrypt').checked = false;
+            $('conv-pwd-row').style.display = 'none';
+            $('conv-progress-fill').style.width = '0%';
+            $('conv-progress-text').textContent = '准备中...';
+            $('conv-stats').innerHTML = '';
+        }
+
+        const dropZone = $('conv-drop-zone');
+        dropZone.onclick = () => $('conv-file-input').click();
+        dropZone.ondragover = e => { e.preventDefault(); dropZone.classList.add('dragover'); };
+        dropZone.ondragleave = () => dropZone.classList.remove('dragover');
+        dropZone.ondrop = e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleConvFiles(e.dataTransfer.files);
+        };
+
+        $('conv-file-input').onchange = e => handleConvFiles(e.target.files);
+        $('conv-dir-input').onchange = e => handleConvFiles(e.target.files);
+        $('conv-dir-btn').onclick = () => $('conv-dir-input').click();
+
+        async function handleConvFiles(files) {
+            if (!files || files.length === 0) return;
+            const first = files[0];
+            const name = first.name || '';
+
+            if (files.length === 1 && (name.toLowerCase().endsWith('.zip') || name.toLowerCase().endsWith('.cbz'))) {
+                convState.sourceFiles = await readZipFiles(files[0]);
+                convState.sourceName = name;
+                convState.isZip = true;
+            } else {
+                const sorted = Array.from(files).filter(f => _isImageFile(f.name));
+                sorted.sort((a, b) => _naturalSort(a.name, b.name));
+                convState.sourceFiles = sorted;
+                convState.sourceName = sorted.length > 0 ? `${sorted.length} 个图片文件` : '无有效文件';
+                convState.isZip = false;
+            }
+
+            if (!convState.sourceFiles || convState.sourceFiles.length === 0) {
+                toast('未找到有效图片文件', 'error');
+                return;
+            }
+
+            $('conv-file-name').textContent = convState.sourceName + ` (${convState.sourceFiles.length} 页)`;
+            $('conv-file-name').classList.add('show');
+            $('convert-start').disabled = false;
+
+            const baseName = name.replace(/\.(zip|cbz)$/i, '');
+            if (!$('conv-title').value) $('conv-title').value = baseName;
+        }
+
+        async function readZipFiles(zipFile) {
+            const zip = await JSZip.loadAsync(zipFile);
+            const entries = [];
+            zip.forEach((path, entry) => {
+                if (!entry.dir && _isImageFile(path)) {
+                    entries.push({ name: path.split('/').pop() || path, entry });
+                }
+            });
+            entries.sort((a, b) => _naturalSort(a.name, b.name));
+            const files = [];
+            for (const e of entries) {
+                const data = await e.entry.async('arraybuffer');
+                files.push({ name: e.name, data: new Uint8Array(data) });
+            }
+            return files;
+        }
+
+        $('convert-start').onclick = async () => {
+            if (!convState.sourceFiles || convState.sourceFiles.length === 0) return;
+
+            const password = $('conv-encrypt').checked ? $('conv-password').value : '';
+            if ($('conv-encrypt').checked && !password) {
+                toast('请输入加密密码', 'error');
+                return;
+            }
+
+            $('convert-start').disabled = true;
+            $('convert-start').textContent = '⏳ 转换中...';
+            $('conv-progress').classList.add('show');
+            $('conv-stats').classList.remove('show');
+            $('conv-progress-fill').style.width = '0%';
+
+            const writer = new CMXWriter();
+            writer.setCompression(parseInt($('conv-compress').value));
+
+            const title = $('conv-title').value.trim();
+            const author = $('conv-author').value.trim();
+            if (title || author) {
+                writer.setMetadata({
+                    title: title || undefined,
+                    author: author || undefined,
+                    language: 'zh',
+                    created: new Date().toISOString().split('T')[0],
+                    originalFormat: convState.sourceName.split('.').pop()?.toUpperCase() || 'IMAGE',
+                });
+            }
+
+            if ($('conv-rtl').checked) writer.setFlags(FLAG_RTL);
+
+            const total = convState.sourceFiles.length;
+            const makeThumbs = $('conv-thumbnails').checked;
+            const startTime = performance.now();
+
+            for (let i = 0; i < total; i++) {
+                const f = convState.sourceFiles[i];
+                let data;
+                if (convState.isZip) {
+                    data = f.data.buffer || f.data;
+                } else {
+                    data = await f.arrayBuffer();
+                }
+                const imgFormat = _imgFormatFromName(f.name);
+                const info = await _getImageInfo(data);
+                let thumbData = null;
+                if (makeThumbs) {
+                    thumbData = await _makeThumbFromImage(data);
+                }
+                writer.addPage(data, imgFormat, info.width, info.height, thumbData);
+
+                const pct = Math.round((i + 1) / total * 100);
+                $('conv-progress-fill').style.width = pct + '%';
+                $('conv-progress-text').textContent = `处理中... ${i + 1} / ${total}`;
+                await new Promise(r => setTimeout(r, 0));
+            }
+
+            try {
+                $('conv-progress-text').textContent = '正在生成 CMX 文件...';
+                const cmxBuf = await writer.finalize(password || null);
+                const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+
+                const blob = new Blob([cmxBuf], { type: 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const outName = (title || convState.sourceName.replace(/\.(zip|cbz)$/i, '')) + '.cmx';
+                a.download = outName;
+                a.click();
+                URL.revokeObjectURL(url);
+
+                const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+                $('conv-stats').innerHTML =
+                    `✅ 转换完成！<br>` +
+                    `文件: ${outName}<br>` +
+                    `页数: ${total} 页<br>` +
+                    `大小: ${sizeMB} MB<br>` +
+                    `耗时: ${elapsed} 秒<br>` +
+                    `压缩: ${$('conv-compress').selectedOptions[0].text}<br>` +
+                    `缩略图: ${makeThumbs ? '是' : '否'}<br>` +
+                    `加密: ${password ? 'AES-256-GCM' : '否'}`;
+                $('conv-stats').classList.add('show');
+                $('conv-progress').classList.remove('show');
+                $('convert-start').textContent = '✅ 已下载';
+                toast('转换完成！文件已下载', 'success');
+            } catch (e) {
+                console.error('转换失败:', e);
+                toast('转换失败: ' + e.message, 'error');
+                $('conv-progress').classList.remove('show');
+                $('convert-start').textContent = '⚡ 开始转换';
+                $('convert-start').disabled = false;
+            }
+        };
+
+        // ══════════════════════════════════════════════════════════════════════════════
+        //  Init
+        // ══════════════════════════════════════════════════════════════════════════════
+
+        console.log('CMX Reader v1.0 — 专业 CMX 漫画阅读器已就绪');
+        console.log('支持格式: .cmx (CMX v1.0)');
+        console.log('特性: O(1)随机访问 · AES-256-GCM加密 · 内置缩略图 · zlib压缩 · 内置转换器');
+        console.log('快捷键: ← → 翻页 · +/- 缩放 · F 全屏 · Ctrl+I 信息 · Ctrl+D 双页 · Ctrl+R 方向');
+    </script>
+</body>
+
+</html>
