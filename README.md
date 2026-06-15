@@ -39,6 +39,12 @@ npx serve .
 
 然后在浏览器中访问 `http://localhost:8080/cmx-reader.html`
 
+### 方式三：github-pages 体验
+1. 点击 [cmx-reader]([index.html](https://loongkc.github.io/CMX-Reader/))
+2. 直接在浏览器打开即可使用体验
+
+**注：github-pages加载文件等会慢很多，仅作为功能体验使用，不能代表本地运行性能**
+
 ## 使用方法
 
 ### 打开 CMX 文件
